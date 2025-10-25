@@ -1,9 +1,11 @@
 import { getBearerToken, validateJWT } from "../auth";
 import { respondWithJSON } from "./json";
-import { getVideo } from "../db/videos";
+import { getVideo, updateVideo } from "../db/videos";
 import type { ApiConfig } from "../config";
 import type { BunRequest } from "bun";
-import { BadRequestError, NotFoundError } from "./errors";
+import { BadRequestError, NotFoundError, UserForbiddenError } from "./errors";
+
+const MAX_UPLOAD_SIZE = 10 << 20
 
 type Thumbnail = {
   data: ArrayBuffer;
@@ -37,6 +39,7 @@ export async function handlerGetThumbnail(cfg: ApiConfig, req: BunRequest) {
 }
 
 export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
+  //validate Request
   const { videoId } = req.params as { videoId?: string };
   if (!videoId) {
     throw new BadRequestError("Invalid video ID");
@@ -47,7 +50,48 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
 
   console.log("uploading thumbnail for video", videoId, "by user", userID);
 
-  // TODO: implement the upload here
+  // get Video
+  const videoMetadata = getVideo(cfg.db, videoId);
 
-  return respondWithJSON(200, null);
+  if (!videoMetadata) {
+    throw new BadRequestError("Video not found.")
+  }
+
+  if (videoMetadata.userID !== userID) {
+    throw new UserForbiddenError("You do not own this video.")
+  }
+
+  //parse form data
+  const formData = await req.formData();
+  const file = formData.get('thumbnail');
+
+  if (!(file instanceof File)) {
+    throw new BadRequestError("Thumbnail file missing!");
+  }
+
+  if (file.size > MAX_UPLOAD_SIZE) {
+    throw new BadRequestError("Thumbnail file exceeds the maximum allowed size of 10MB");
+  }
+  
+  // read and save the image file data
+  const mediaType = file.type;
+  if (!mediaType) {
+    throw new BadRequestError("Missing Content-Type for thumbnail");
+  }  
+  
+  const fileData = await file.arrayBuffer();
+  if (!fileData) {
+    throw new Error("Error reading file data");
+  }
+
+  videoThumbnails.set(videoMetadata.id, {
+    data: fileData, 
+    mediaType: mediaType
+  });
+
+  const thumbnailURL = `http://localhost:${cfg.port}/api/thumbnails/${videoMetadata.id}`
+  videoMetadata.thumbnailURL = thumbnailURL
+  updateVideo(cfg.db, videoMetadata)
+
+  return respondWithJSON(200, videoMetadata);
 }
