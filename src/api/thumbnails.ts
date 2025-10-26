@@ -5,6 +5,7 @@ import type { ApiConfig } from "../config";
 import type { BunRequest } from "bun";
 import { BadRequestError, NotFoundError, UserForbiddenError } from "./errors";
 import path from "path";
+import { allowedTypes, mediaTypeToExtension } from "./assets";
 
 const MAX_UPLOAD_SIZE = 10 << 20
 
@@ -142,19 +143,25 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
   }
   
   // read and save the image file data
-  const mediaType = file.type.split("/").slice(1);
+  const mediaType = file.type
   if (!mediaType) {
     throw new BadRequestError("Missing Content-Type for thumbnail");
   }  
-  
+
+  if (!allowedTypes.includes(mediaType)) {
+    throw new BadRequestError("File type not supported. Only JPEG or PNG allowed.")
+  }
+
+  const fileExtension = mediaTypeToExtension(mediaType)
+
   const fileData = await file.arrayBuffer();
   if (!fileData) {
     throw new Error("Error reading file data");
   }
   
-  const videoPath = path.join(cfg.assetsRoot, `${videoId}.${mediaType}`)
+  const videoPath = path.join(cfg.assetsRoot, `${videoId}${fileExtension}`)
   await Bun.write(videoPath, fileData)
-  videoMetadata.thumbnailURL = `http://localhost:${cfg.port}/assets/${videoId}.${mediaType}`
+  videoMetadata.thumbnailURL = `http://localhost:${cfg.port}/assets/${videoId}${fileExtension}`
   updateVideo(cfg.db, videoMetadata)
 
   return respondWithJSON(200, videoMetadata);
