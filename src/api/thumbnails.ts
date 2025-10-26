@@ -7,36 +7,36 @@ import { BadRequestError, NotFoundError, UserForbiddenError } from "./errors";
 
 const MAX_UPLOAD_SIZE = 10 << 20
 
-type Thumbnail = {
-  data: ArrayBuffer;
-  mediaType: string;
-};
+// type Thumbnail = {
+//   data: ArrayBuffer;
+//   mediaType: string;
+// };
 
-const videoThumbnails: Map<string, Thumbnail> = new Map();
+// const videoThumbnails: Map<string, Thumbnail> = new Map();
 
-export async function handlerGetThumbnail(cfg: ApiConfig, req: BunRequest) {
-  const { videoId } = req.params as { videoId?: string };
-  if (!videoId) {
-    throw new BadRequestError("Invalid video ID");
-  }
+// export async function handlerGetThumbnail(cfg: ApiConfig, req: BunRequest) {
+//   const { videoId } = req.params as { videoId?: string };
+//   if (!videoId) {
+//     throw new BadRequestError("Invalid video ID");
+//   }
 
-  const video = getVideo(cfg.db, videoId);
-  if (!video) {
-    throw new NotFoundError("Couldn't find video");
-  }
+//   const video = getVideo(cfg.db, videoId);
+//   if (!video) {
+//     throw new NotFoundError("Couldn't find video");
+//   }
+  
+//   const thumbnail = videoThumbnails.get(videoId);
+//   if (!thumbnail) {
+//     throw new NotFoundError("Thumbnail not found");
+//   }
 
-  const thumbnail = videoThumbnails.get(videoId);
-  if (!thumbnail) {
-    throw new NotFoundError("Thumbnail not found");
-  }
-
-  return new Response(thumbnail.data, {
-    headers: {
-      "Content-Type": thumbnail.mediaType,
-      "Cache-Control": "no-store",
-    },
-  });
-}
+//   return new Response(thumbnail.data, {
+//     headers: {
+//       "Content-Type": thumbnail.mediaType,
+//       "Cache-Control": "no-store",
+//     },
+//   });
+// }
 
 export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
   //validate Request
@@ -84,13 +84,17 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
     throw new Error("Error reading file data");
   }
 
-  videoThumbnails.set(videoMetadata.id, {
-    data: fileData, 
-    mediaType: mediaType
-  });
+  const base64Encoded = Buffer.from(fileData).toString('base64')
+  const base64DataURL = `data:${mediaType};base64,${base64Encoded}`
 
-  const thumbnailURL = `http://localhost:${cfg.port}/api/thumbnails/${videoMetadata.id}`
-  videoMetadata.thumbnailURL = thumbnailURL
+  // videoThumbnails.set(videoMetadata.id, {
+  //   data: fileData, 
+  //   mediaType: mediaType
+  // });
+
+  // const thumbnailURL = `http://localhost:${cfg.port}/api/thumbnails/${videoMetadata.id}` // previous solution
+  // videoMetadata.thumbnailURL = thumbnailURL
+  videoMetadata.thumbnailURL = base64DataURL
   updateVideo(cfg.db, videoMetadata)
 
   return respondWithJSON(200, videoMetadata);
