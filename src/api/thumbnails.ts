@@ -6,6 +6,7 @@ import type { BunRequest } from "bun";
 import { BadRequestError, NotFoundError, UserForbiddenError } from "./errors";
 import path from "path";
 import { allowedTypes, mediaTypeToExtension } from "./assets";
+import { randomBytes } from "crypto";
 
 const MAX_UPLOAD_SIZE = 10 << 20
 
@@ -159,9 +160,11 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
     throw new Error("Error reading file data");
   }
   
-  const videoPath = path.join(cfg.assetsRoot, `${videoId}${fileExtension}`)
+  const randomBuffer = randomBytes(32).toString('base64url');
+  const fileName = `${randomBuffer}${fileExtension}`
+  const videoPath = path.join(cfg.assetsRoot, fileName)
   await Bun.write(videoPath, fileData)
-  videoMetadata.thumbnailURL = `http://localhost:${cfg.port}/assets/${videoId}${fileExtension}`
+  videoMetadata.thumbnailURL = `http://localhost:${cfg.port}/assets/${fileName}`
   updateVideo(cfg.db, videoMetadata)
 
   return respondWithJSON(200, videoMetadata);
