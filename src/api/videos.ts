@@ -1,16 +1,13 @@
 import { rm } from "fs/promises"
 import path from "path";
-
 import { respondWithJSON } from "./json";
 import { type ApiConfig } from "../config";
-import { file, S3Client, type BunRequest } from "bun";
+import { type BunRequest } from "bun";
 import { BadRequestError, UserForbiddenError } from "./errors";
 import { getBearerToken, validateJWT } from "../auth";
-import { getVideo, updateVideo } from "../db/videos";
+import { getVideo, updateVideo, type Video } from "../db/videos";
 import { mediaTypeToExtension } from "./assets";
-import { randomBytes } from "crypto";
-import { uploadVideoToS3 } from "../s3";
-import { stderr, stdout } from "process";
+import { generatePresignedURL, uploadVideoToS3 } from "../s3";
 
 
 const MAX_VIDEO_UPLOAD_SIZE = 1 << 30
@@ -73,15 +70,18 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
   await uploadVideoToS3(cfg, key, fastStartVideoPath, mediaType)
 
   // updating video record on DB with the S3 object URL
-  const videoURL = `https://${cfg.s3Bucket}.s3.${cfg.s3Region}.amazonaws.com/${key}`
+  // const videoURL = `https://${cfg.s3Bucket}.s3.${cfg.s3Region}.amazonaws.com/${key}`
+  const videoURL = key
   video.videoURL = videoURL
   updateVideo(cfg.db, video);
+  
   
   // ensuring that the temp files are removed
   await Promise.all([rm(tempVideoPath, { force: true })])
   await Promise.all([rm(fastStartVideoPath, { force: true })])
-
-  return respondWithJSON(200, video)
+  
+  const signed = await dbVideoToSignedVideo(cfg, video);
+  return respondWithJSON(200, signed)
 }
 
 export async function getVideoAspectRatio(filepath: string) {
@@ -119,17 +119,27 @@ export async function getVideoAspectRatio(filepath: string) {
 async function processVideoForFastStart(inputFilePath: string) {
   const outputFilePath = inputFilePath + ".processed"
   const subproc = Bun.spawn(
-    ["ffmpeg", "-i", inputFilePath, "-movflags", "faststart", "-map_metadata", "0", "-codec", "copy", "-f", "mp4", outputFilePath], {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+    ["ffmpeg", "-i", inputFilePath, "-movflags", "faststart", "-map_metadata", "0", "-codec", "copy", "-f", "mp4", outputFilePath], 
+    { stderr: "pipe" }
+  );
 
-  const stdoutText = await new Response(subproc.stdout).text();
   const stderrText = await new Response(subproc.stderr).text();
-  
-  const error = await subproc.exited
-  if (error !== 0) {
+  const exitCode = await subproc.exited
+  if (exitCode !== 0) {
     throw new Error(`ffmpeg error: ${stderrText}`)
   }
+  
   return outputFilePath
+}
+
+
+
+export async function dbVideoToSignedVideo(cfg: ApiConfig, video: Video) {
+  if (!video.videoURL) {
+    return video
+  }
+  
+  const key = video.videoURL as string
+  video.videoURL = await generatePresignedURL(cfg, key, 5 * 60)
+  return video;
 }
