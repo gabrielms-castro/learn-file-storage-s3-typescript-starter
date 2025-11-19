@@ -11,10 +11,10 @@ export async function uploadVideoToS3(
     await s3file.write(videoFile, { type: contentType });
 }
 
-export async function generatePresignedURL(cfg: ApiConfig, key: string, expireTime: number) {
-  const presignedURL = cfg.s3Client.presign(key, {
-    bucket: cfg.s3Bucket,
-    expiresIn: expireTime,
-  });
-  return presignedURL;
-}
+// export async function generatePresignedURL(cfg: ApiConfig, key: string, expireTime: number) {
+//   const presignedURL = cfg.s3Client.presign(key, {
+//     bucket: cfg.s3Bucket,
+//     expiresIn: expireTime,
+//   });
+//   return presignedURL;
+// }
