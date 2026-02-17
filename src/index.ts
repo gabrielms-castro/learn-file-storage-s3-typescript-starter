@@ -23,6 +23,7 @@ ensureAssetsDir(cfg);
 
 Bun.serve({
   port: Number(cfg.port),
+  hostname: '0.0.0.0',
   development: cfg.platform === "dev",
   routes: {
     "/": spa, 
